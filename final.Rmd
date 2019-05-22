@@ -1,0 +1,93 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r knitr_setup, echo=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+
+
+
+We will be using the AirBnB dataset for this tutorial. The goal of this tutorial is to learn the basics of data science using R and to answer the question:
+
+First, we want to add the tidyverse library and read in the Airbnb data for New York, New York.
+
+```{r load_data, message=FALSE}
+library(gapminder)
+library(tidyverse)
+library(ggplot2)
+library(broom)
+data = read_csv('listings.csv')
+data
+```
+
+
+We want to answer a couple of questions using the Airbnb data. Recently, there was a report that 72% of Airbnb listings in New York city are illegal (https://www.wired.com/2014/10/report-says-72-percent-airbnbs-new-york-rentals-illegal/). In New York, you aren't allowed to rent an entire apartment/house for less than 30 days, unless the tenants are also living in the home. We want to test this claim by finding out the total number of listings in New York City, then find out how many of those listings are "Entire home/apt" listings with a minimum number of nights that is less than 30.
+
+
+In this process of the pipeline, we are currating our data to the requirements that we just stated, then we use the function "nrow" to return the number of rows in the database, corresponding to the number of listings.
+```{r pipeline}
+data<-data%>%
+  filter(price < 500)
+total_num_listings<- nrow(data)
+total_num_listings
+illegal_units<-data %>%
+  filter(room_type == 'Entire home/apt')%>%
+  filter(minimum_nights < 30)
+num_illegal_units<-nrow(illegal_units)
+num_illegal_units
+
+percentage<- num_illegal_units/total_num_listings
+percentage
+```
+We can clearly see that the report is a bit off in the calculation of the 72% of listings. Although we don't know exactly how they got to this percentage, it seems unlikely that 72% of listings are illegal. On the other hand, 45% is still a very high number of listings that are illegal according to New York State Law.
+
+
+Another question I wanted to answer is, do listings with more reviews(and hence, more stays) generate a higher priced listing? Can a tenant make more money by being a better host and hosting more people? if not, what factors go into determining the price of a listing?
+
+
+
+```{r plot}
+data%>%
+  ggplot(mapping = aes(x=number_of_reviews, y = price)) +
+  geom_point() +
+  labs(title="Price over Number of Reviews",
+         x = "Number of Reviews",
+         y = "Price")
+```
+
+
+Based on this plot, it seems unlikely that the number of reviews has a direct correlation with price. Perhaps it could have an inverse correlation, but the graph seems to exponential for that to be true as well. We will run a linear regression model on this to see if there is a correlation between price and number of reviews. We will use the "lm" function in R to create a linear regression model. The goal of this is to determine the role that one attribute plays on another attribute, in our case, the role of the number of reviews on price. to Learn more about the "lm" function, take a look at this page: https://www.r-bloggers.com/r-tutorial-series-simple-linear-regression/
+
+```{r plot2}
+model <- lm(price~number_of_reviews, data= data)
+  
+
+model%>%
+  tidy()
+```
+
+As we can see from the linear regression model. the number of reviews has a p value that is less than the significance level (.05) so it does play a role in determining price, however, the price actually drops by -.043 per review. This could be because the cheaper listings tend to get more reviews because they are more popular.
+
+
+Now, let's see how the neighborhood can effect price. Our data set has a value "neighbourhood_group" that we want to use. One issue we need to solve in regards to formatting this data is to convert the "neighbourhood_group" category from char data type to factor so that we can run the linear regression model. Once we have the data formatted correctly, we will run the liner regression model using the "lm" function then we will augment it so that we can create violin plots. These violin plots will tell us whether or not neighbourhood has a significant effect on price. If neighbourhood doesn't have an effect, the violin shapes should look very similar, but if it does, the violins should look very defferent from each other.
+
+```{r pipeline3, eval = TRUE}
+data$neighbourhood_group <- as.factor(data$neighbourhood_group)
+
+neighbourhood_model <- lm(price~neighbourhood_group, data= data)
+neighbourhood_model%>%
+  tidy()
+
+augmented_neighbourhood<- neighbourhood_model%>%
+  augment()
+augmented_neighbourhood%>%
+  ggplot(aes(x=neighbourhood_group,y=.resid)) +
+    geom_violin() +
+    labs(x="neighborhood", y="residual")
+  
+```
+
+If the neighborhood had no effect on the price, these violin shapes should look very similar, but as we can see they aren't. This tells us that neighborhood must have an effect on price! Looking at the regression model, we can clearly see that each neighborhood has a much different effect on price. Listings in Manhattan and Brooklyn increase the price but $82.34 on average and $32.36, recpectively. the p values for Brooklyn, Manhattan, and Queens are much below the significance level of .05 which tells us that this plays a significant role in determining price where as the p value of Staten Island (.1314) is much above the significance level so it is not a significant determinant of price.
